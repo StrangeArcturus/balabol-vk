@@ -1,0 +1,3 @@
+markovify
+vkbottle
+sqlite3
