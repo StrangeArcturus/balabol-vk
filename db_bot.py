@@ -16,15 +16,17 @@ from vkbottle.dispatch.rules.bot import ChatActionRule, FromUserRule
 from db_connector import DataBaseConnector
 from config import *  # BOT_TOKEN, RESPONSE_CHANCE, RESPONSE_DELAY
 
-connector = DataBaseConnector("db/balabol.db")
+connector = DataBaseConnector("db/balabol.db", "vk")
 bot = Bot(BOT_TOKEN)
+print("бот начал слушать сообщения")
 
 
 @bot.on.chat_message(ChatActionRule("chat_invite_user"))
 async def invited(message: Message) -> None:
     """Приветствие при приглашении бота в беседу."""
     if message.group_id == -message.action.member_id:
-        connector.create_table(message.peer_id)
+        await connector.create_table(message.peer_id)
+        print("пригласили в новый чат")
         await message.answer(
             """
 Всем привет! Я Балабол, я учусь человеческой речи, и для каждого чата
@@ -38,6 +40,7 @@ async def invited(message: Message) -> None:
 async def reset(message: Message) -> None:
     """Сброс базы данных администратором беседы."""
     peer_id = message.peer_id
+    print(f"послана команда сбросить базу данных для чата {peer_id}")
     try:
         members = await message.ctx_api.messages.get_conversation_members(
             peer_id=peer_id
@@ -54,20 +57,23 @@ async def reset(message: Message) -> None:
 
         # Удаление базы данных беседы
         try:
-            remove(f"db/{peer_id}.db") # not txt
+            # remove(f"db/{peer_id}.db") # not txt
+            await connector.clean_table(peer_id)
         except FileNotFoundError:
             pass
 
         await message.answer(f"@id{from_id}, база данных успешно сброшена.")
+        print("база данных успешно сброшена")
     else:
         await message.answer("Сбрасывать базу данных могут только администраторы.")
+        print("отклонено. Сбрасывать базу данных могут только администраторы.")
 
 
 @bot.on.chat_message(FromUserRule())
 async def talk(message: Message) -> None:
     peer_id = message.peer_id
     text = message.text.lower()
-    print(f"заметил сообщение в беседе:\n{text}")
+    print(f"заметил сообщение в беседе:\n'{text}'")
 
     if text:
         # Удаление пустых строк из полученного сообщения
@@ -84,37 +90,14 @@ async def talk(message: Message) -> None:
             mkdir("db")
         except FileExistsError:
             pass
-
-        """
-        # Запись нового сообщения в историю беседы
-        async with aiofiles.open(f"db/{peer_id}.txt", "a") as f:
-            await f.write(f"\n{text}")
-        """
-        if f"{peer_id}.db" not in listdir("./db"):
-            create_table(peer_id)
         
         # запись нового сообщения в базу данных чата
-        conn = sqlite3.connect(f"db/{peer_id}.db")
-        cursor = conn.cursor()
-        last_value: int = get_last_value(peer_id)
-        
-        cursor.execute(
-            f"""
-            INSERT INTO messages
-            VALUES ({last_value + 1}, {text})
-            """
-        )
-        
+        await connector.write_new_message(peer_id, text)
     if random() > RESPONSE_CHANCE:
         return
 
     # Чтение истории беседы
-    '''
-    async with aiofiles.open(f"db/{peer_id}.txt") as f:
-        db = await f.read()
-    db = db.strip().lower()
-    '''
-    messages_dict: dict = get_all_values_as_dict(peer_id)
+    messages_dict: dict = await connector.get_all_values_as_dict(peer_id)
     messages_list: list = [messages_dict[key] for key in messages_dict.keys()]
     db: str = "\n".join(messages_list)
     db = db.strip().lower()
@@ -123,8 +106,9 @@ async def talk(message: Message) -> None:
     await sleep(RESPONSE_DELAY)
 
     # Генерация сообщения
-    text_model = NewlineText(input_text=db, well_formed=True, state_size=4, chain=True)
+    text_model = NewlineText(input_text=db, well_formed=False, state_size=4)
     sentence = text_model.make_sentence(tries=1000) or choice(db.splitlines())
+    print(f"отвечаю на сообщениею Мой ответ: {sentence}")
 
     await message.answer(sentence)
 
