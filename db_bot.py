@@ -1,4 +1,10 @@
 # -*- coding: utf-8 -*-
+"""
+изначально бот был взят отсюда: https://github.com/monosans/vk-markovify-chatbot
+но после был доработан мной
+в частности, доработки дали практику в аснхронном коде)
+"""
+
 import re
 from asyncio import sleep
 from os import mkdir, remove, listdir
