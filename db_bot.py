@@ -112,7 +112,7 @@ async def talk(message: Message) -> None:
     await sleep(RESPONSE_DELAY)
 
     # Генерация сообщения
-    text_model = NewlineText(input_text=db, well_formed=False, state_size=4)
+    text_model = NewlineText(input_text=db, well_formed=False, state_size=1)
     sentence = text_model.make_sentence(tries=1000) or choice(db.splitlines())
     print(f"отвечаю на сообщениею Мой ответ: {sentence}")
 
